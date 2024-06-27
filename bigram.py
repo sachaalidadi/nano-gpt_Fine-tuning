@@ -1,6 +1,9 @@
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
+import matplotlib.pyplot as plt
+import time
+import sys
 
 batch_size = 34
 block_size = 128
@@ -184,10 +187,15 @@ m = model.to(device)
 
 optimizer = torch.optim.Adam(model.parameters(),lr=learning_rate)
 
+losses_train = []
+losses_val = []
+
 for iter in range(max_iters):
     if iter%eval_interval==0:
         losses = estimate_loss()
         print(f"Iter: {iter}, Train loss: {losses['train']}, Val loss: {losses['val']}")
+        losses_train.append(losses['train'])
+        losses_val.append(losses['val'])
     
     xb,yb = get_batch("train")
 
@@ -196,17 +204,44 @@ for iter in range(max_iters):
     loss.backward()
     optimizer.step()
 
+losses = estimate_loss()
+print(f"Iter: {iter}, Train loss: {losses['train']}, Val loss: {losses['val']}")
+losses_train.append(losses['train'])
+losses_val.append(losses['val'])
+
+epochs = range(0,max_iters+1,eval_interval)
+plt.plot(epochs,losses_train,label="Train loss")
+plt.plot(epochs,losses_val,".",label="Val loss")
+plt.legend()
+plt.savefig("bigram_loss.png")
+plt.clf()
+
 context = torch.zeros((1,1),dtype=torch.long,device = device)
 print(decode(m.generate(context,max_new_tokens=500)[0].tolist()))
 
 # Begin fine-tuning
 
+losses_train = []
+losses_val = []
+
+# Freeze all layers except the last one
+
+if sys.argv[1] == "--freeze":
+    for param in model.parameters():
+        param.requires_grad = False
+    for param in model.lm_head.parameters():
+        param.requires_grad = True
+
 optimizer = torch.optim.Adam(model.parameters(),lr=learning_rate)
+
+start_ft_time = time.time()
 
 for iter in range(max_iters):
     if iter % eval_interval == 0:
         losses = estimate_loss_ft()
         print(f"Iter: {iter}, Train loss: {losses['train']}, Val loss: {losses['val']}")
+        losses_train.append(losses['train'])
+        losses_val.append(losses['val'])
     
     xb,yb = get_batch_fine_tuning("train")
     logits,loss = model(xb,yb)
@@ -214,5 +249,20 @@ for iter in range(max_iters):
     loss.backward()
     optimizer.step()
 
+end_ft_time = time.time()
+
+losses = estimate_loss_ft()
+print(f"Iter: {iter}, Train loss: {losses['train']}, Val loss: {losses['val']}")
+losses_train.append(losses['train'])
+losses_val.append(losses['val'])
+
+epochs = range(0,max_iters+1,eval_interval)
+plt.plot(epochs,losses_train,label="Train loss")
+plt.plot(epochs,losses_val,".",label="Val loss")
+plt.legend()
+plt.savefig("bigram_loss_ft.png")
+
 context = torch.zeros((1,1),dtype=torch.long,device = device)
 print(decode(m.generate(context,max_new_tokens=500)[0].tolist()))
+
+print("Fine-tuning time: ",end_ft_time-start_ft_time," seconds")
