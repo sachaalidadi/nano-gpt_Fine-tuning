@@ -224,7 +224,7 @@ print(decode(m.generate(context,max_new_tokens=500)[0].tolist()))
 losses_train = []
 losses_val = []
 
-# Freeze all layers except the last one
+# Freeze all layers except the last one if the argument --freeze is passed
 
 if sys.argv[1] == "--freeze":
     for param in model.parameters():
